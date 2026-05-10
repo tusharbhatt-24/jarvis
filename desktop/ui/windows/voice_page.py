@@ -141,7 +141,8 @@ class VoicePage(QWidget):
                 self.recording_frames.append(indata.copy())
                 
             try:
-                self.audio_stream = sd.InputStream(samplerate=16000, channels=1, callback=callback)
+                self.audio_stream = sd.InputStream(samplerate=44100, channels=1, callback=callback)
+
                 self.audio_stream.start()
             except Exception as e:
                 self.status_label.setText(f"Error starting mic: {e}")
@@ -167,7 +168,8 @@ class VoicePage(QWidget):
             if self.recording_frames:
                 import numpy as np
                 data = np.concatenate(self.recording_frames, axis=0)
-                sf.write(self.temp_audio_path, data, 16000)
+                sf.write(self.temp_audio_path, data, 44100)
+
                 
                 # Send to backend after a short delay
                 QTimer.singleShot(100, self._send_audio)
@@ -239,11 +241,28 @@ class VoicePage(QWidget):
                 
             logger.info(f"[VoicePage] Saved audio to {play_path}")
             
-            # Use QMediaPlayer instead of afplay
-            from PySide6.QtCore import QUrl
-            self.player.setSource(QUrl.fromLocalFile(play_path))
-            self.player.play()
-            logger.info(f"[VoicePage] Started playback with QMediaPlayer")
+            # Try playing with sounddevice first (pure Python, no GUI)
+            import sounddevice as sd
+            import soundfile as sf
+            try:
+                data, fs = sf.read(play_path)
+                sd.play(data, fs)
+                logger.info(f"[VoicePage] Started playback with sounddevice")
+            except Exception as e:
+                logger.warning(f"[VoicePage] sounddevice playback failed: {e}. Trying afplay.")
+                # Fallback to afplay
+                import subprocess
+                try:
+                    subprocess.Popen(["afplay", play_path])
+                    logger.info(f"[VoicePage] Started playback with afplay")
+                except Exception as e2:
+                    logger.warning(f"[VoicePage] afplay failed: {e2}. Trying QMediaPlayer.")
+                    from PySide6.QtCore import QUrl
+                    self.player.setSource(QUrl.fromLocalFile(play_path))
+                    self.player.play()
+
+
+
             
             # Reset status after a few seconds
             QTimer.singleShot(3000, lambda: self.status_label.setText("Click the button below to start speaking."))

@@ -197,7 +197,8 @@ class AIConsolePage(QWidget):
                 self.recording_frames.append(indata.copy())
                 
             try:
-                self.audio_stream = sd.InputStream(samplerate=16000, channels=1, callback=callback)
+                self.audio_stream = sd.InputStream(samplerate=44100, channels=1, callback=callback)
+
                 self.audio_stream.start()
                 self._add_chat_bubble("🎙️ Listening...", is_user=False)
             except Exception as e:
@@ -220,7 +221,8 @@ class AIConsolePage(QWidget):
             if self.recording_frames:
                 import numpy as np
                 data = np.concatenate(self.recording_frames, axis=0)
-                sf.write(self.temp_audio_path, data, 16000)
+                sf.write(self.temp_audio_path, data, 44100)
+
                 
                 # Wait a moment for file to save (not strictly needed now but safe)
                 QTimer.singleShot(100, self._send_audio_file)
@@ -280,8 +282,25 @@ class AIConsolePage(QWidget):
             with open(play_path, "wb") as f:
                 f.write(audio_data)
                 
-            self.player.setSource(QUrl.fromLocalFile(play_path))
-            self.player.play()
+            # Try playing with sounddevice first (pure Python, no GUI)
+            import sounddevice as sd
+            import soundfile as sf
+            try:
+                data, fs = sf.read(play_path)
+                sd.play(data, fs)
+            except Exception as e:
+                print(f"sounddevice playback failed: {e}. Trying afplay.")
+                # Fallback to afplay
+                import subprocess
+                try:
+                    subprocess.Popen(["afplay", play_path])
+                except Exception as e2:
+                    print(f"afplay failed: {e2}. Trying QMediaPlayer.")
+                    self.player.setSource(QUrl.fromLocalFile(play_path))
+                    self.player.play()
+
+
+
         except Exception as e:
             print(f"Failed to play audio: {e}")
         
